@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trash Room Compactor Usage</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: Arial, 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1A1A2E 0%, #0F0F1A 100%);
+            min-height: 100vh;
+            padding: 10px;
+        }
+
+        /* Passcode Lock Screen */
+        .passcode-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(135deg, #1A1A2E 0%, #0F0F1A 100%);
+            z-index: 2000; display: flex; justify-content: center; align-items: center; flex-direction: column;
+        }
+        .passcode-overlay.hidden { display: none; }
+        .passcode-container {
+            background: white; border-radius: 15px; padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3); text-align: center; max-width: 300px; width: 90%;
+        }
+        .passcode-container h1 { color: #1A1A2E; margin-bottom: 10px; font-size: 24px; }
+        .passcode-container p { color: #666; margin-bottom: 25px; font-size: 14px; }
+        .passcode-input {
+            width: 100%; padding: 15px; font-size: 24px; border: 2px solid #ddd; border-radius: 8px;
+            text-align: center; letter-spacing: 5px; margin-bottom: 20px; font-family: monospace;
+        }
+        .passcode-input:focus { outline: none; border-color: #C8A96E; box-shadow: 0 0 10px rgba(200,169,110,0.35); }
+        .passcode-btn {
+            width: 100%; padding: 12px; background: #1A1A2E; color: white; border: none; border-radius: 8px;
+            font-weight: 600; font-size: 16px; cursor: pointer; transition: all 0.3s ease;
+        }
+        .passcode-btn:hover { background: #0F0F1A; transform: translateY(-2px); box-shadow: 0 5px 15px rgba(26,26,46,0.35); }
+        .passcode-error { color: #e74c3c; font-size: 13px; margin-top: 10px; display: none; }
+        .passcode-error.show { display: block; }
+
+        .container {
+            max-width: 800px; margin: 0 auto; background: white; border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2); overflow: hidden;
+        }
+
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, #1A1A2E 0%, #0F0F1A 100%);
+            color: white; padding: 20px; text-align: center; border-bottom: 3px solid #C8A96E;
+        }
+        .header .brand { font-size: 12px; font-weight: bold; letter-spacing: 4px; color: #C8A96E; margin-bottom: 8px; }
+        .header h1 { font-size: 26px; margin-bottom: 4px; }
+        .header p { font-size: 13px; color: #AAAAAA; }
+
+        .content { padding: 20px; }
+
+        /* Purpose / PPE boxes */
+        .purpose-box {
+            display: flex; background: #F5EFE6; border-radius: 4px; margin-bottom: 20px; overflow: hidden;
+        }
+        .purpose-box .accent { width: 6px; background: #C8A96E; flex-shrink: 0; }
+        .purpose-box .text { padding: 14px 16px; }
+        .purpose-box .text h3 { color: #1A1A2E; font-size: 13px; letter-spacing: 1px; margin-bottom: 6px; }
+        .purpose-box .text p { color: #2C2C2C; font-size: 13px; line-height: 1.5; }
+        .purpose-box .text ul { margin: 6px 0 0 18px; color: #2C2C2C; font-size: 13px; line-height: 1.6; }
+
+        .section { margin-bottom: 22px; }
+
+        .section-title {
+            background: #1A1A2E; color: #ffffff; padding: 12px; font-size: 15px; font-weight: bold;
+            border-bottom: 2px solid #C8A96E; margin-bottom: 12px; border-radius: 3px;
+        }
+
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: 600; color: #333; font-size: 14px; }
+        .form-group input, .form-group textarea {
+            width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; font-family: inherit;
+        }
+        .form-group textarea { resize: vertical; min-height: 70px; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+
+        /* Checklist */
+        .checklist-item {
+            display: flex; align-items: center; gap: 12px; background: #f9f9f9; padding: 12px 14px;
+            margin-bottom: 8px; border-radius: 5px; border: 1px solid #e0e0e0; cursor: pointer; transition: all 0.2s ease;
+        }
+        .checklist-item .box {
+            flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #C8A96E; border-radius: 4px;
+            display: flex; align-items: center; justify-content: center; font-weight: bold; color: #C8A96E; background: white;
+        }
+        .checklist-item.checked { background: #1A1A2E; border-color: #1A1A2E; }
+        .checklist-item.checked .box { background: #C8A96E; border-color: #C8A96E; color: #1A1A2E; }
+        .checklist-item .label { font-size: 14px; color: #333; }
+        .checklist-item.checked .label { color: #ffffff; }
+
+        .button-bar { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px; }
+        .btn { padding: 12px 20px; border: none; border-radius: 5px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.3s ease; }
+        .btn-primary { background: #1A1A2E; color: white; }
+        .btn-primary:hover { background: #0F0F1A; transform: translateY(-2px); box-shadow: 0 5px 15px rgba(26,26,46,0.35); }
+        .btn-danger { background: #e74c3c; color: white; }
+        .btn-danger:hover { background: #c0392b; }
+        .btn-secondary { background: #95a5a6; color: white; width: 100%; margin-top: 8px; }
+        .btn-secondary:hover { background: #7f8c8d; }
+
+        .footer-warning {
+            text-align: center; border-top: 3px solid #C8A96E; padding-top: 12px; margin-top: 25px; font-size: 12px;
+        }
+        .footer-warning b { color: #C8A96E; }
+        .footer-warning span { color: #888888; }
+
+        .qr-section { background: #f9f9f9; padding: 20px; border-radius: 5px; text-align: center; margin-top: 10px; }
+        #qrcode { display: inline-block; margin: 15px 0; }
+        .qr-link {
+            display: inline-block; background: #1A1A2E; color: white; padding: 10px 15px; border-radius: 5px;
+            text-decoration: none; font-size: 12px; word-break: break-all; margin-top: 10px; max-width: 100%;
+        }
+
+        .success-message, .error-message, .pending-reports {
+            padding: 12px; border-radius: 5px; margin-bottom: 15px; display: none; font-size: 14px;
+        }
+        .success-message { background: #d4edda; color: #155724; }
+        .error-message { background: #f8d7da; color: #721c24; }
+        .pending-reports { background: #fff3cd; color: #856404; }
+        .success-message.show, .error-message.show, .pending-reports.show { display: block; }
+
+        .tab-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+        .tab-btn { padding: 10px; border: 2px solid #ddd; background: white; border-radius: 5px; cursor: pointer; font-weight: 600; transition: all 0.3s ease; font-size: 13px; }
+        .tab-btn.active { background: #1A1A2E; color: white; border-color: #1A1A2E; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* Guide / Instructions page */
+        .guide-step { margin-bottom: 18px; }
+        .guide-step h4 { color: #1A1A2E; font-size: 14px; margin-bottom: 6px; }
+        .guide-step p { color: #2C2C2C; font-size: 13.5px; line-height: 1.6; margin-bottom: 6px; }
+        .guide-step ul { margin: 4px 0 4px 18px; }
+        .guide-step ul li { color: #2C2C2C; font-size: 13.5px; line-height: 1.6; margin-bottom: 4px; }
+        .guide-note {
+            background: #fff3cd; color: #856404; border-radius: 5px; padding: 10px 14px;
+            font-size: 13px; line-height: 1.5; margin: 8px 0 14px 0;
+        }
+
+        .offline-indicator {
+            position: fixed; top: 10px; right: 10px; padding: 8px 12px; border-radius: 5px;
+            font-size: 12px; font-weight: 600; z-index: 999;
+        }
+        .offline-indicator.online { background: #27ae60; color: white; }
+        .offline-indicator.offline { background: #e74c3c; color: white; }
+    </style>
+</head>
+<body>
+
+    <!-- Passcode Lock Screen -->
+    <div class="passcode-overlay" id="passcodeOverlay">
+        <div class="passcode-container">
+            <h1>Compactor Usage SOP</h1>
+            <p>Enter passcode to access</p>
+            <input type="password" id="passcodeInput" class="passcode-input" placeholder="••••" maxlength="4">
+            <button class="passcode-btn" onclick="checkPasscode()">Unlock</button>
+            <div class="passcode-error" id="passcodeError">❌ Incorrect passcode</div>
+        </div>
+    </div>
+
+    <div class="offline-indicator online" id="offlineIndicator">🟢 Online</div>
+
+    <div class="container">
+        <div class="header">
+            <div class="brand">ONNI GROUP</div>
+            <h1>Compactor Usage</h1>
+            <p>Standard Operating Procedure &nbsp;|&nbsp; Building Maintenance &nbsp;|&nbsp; Trash Room / Compactor</p>
+        </div>
+
+        <div class="content">
+            <div class="pending-reports" id="pendingReports">
+                ⏳ <strong id="pendingCount">0</strong> report(s) pending send. They will send automatically when you get service.
+            </div>
+            <div class="success-message" id="successMessage">✅ Report saved and sent.</div>
+            <div class="error-message" id="errorMessage">❌ Error sending email. Please try again.</div>
+
+            <div class="tab-buttons">
+                <button class="tab-btn active" onclick="switchTab(event, 'form')">New Service</button>
+                <button class="tab-btn" onclick="switchTab(event, 'history')">History</button>
+                <button class="tab-btn" onclick="switchTab(event, 'guide')">SOP Guide</button>
+                <button class="tab-btn" onclick="switchTab(event, 'qr')">Share Link</button>
+            </div>
+
+            <!-- Form Tab -->
+            <div id="form" class="tab-content active">
+
+                <div class="purpose-box">
+                    <div class="accent"></div>
+                    <div class="text">
+                        <h3>PURPOSE OF THIS SOP</h3>
+                        <p>To establish a safe, consistent, and thorough process for removing, emptying, cleaning, and reconnecting trash room dumpsters to the compactor/ram. Every step must be completed in order, and no trash room is returned to normal operation until the final inspection confirms the dumpster is properly secured and the chute and compactor are functioning correctly.</p>
+                    </div>
+                </div>
+
+                <div class="purpose-box">
+                    <div class="accent"></div>
+                    <div class="text">
+                        <h3>REQUIRED PPE</h3>
+                        <p>The following PPE must be worn whenever entering or working inside any trash room:</p>
+                        <ul>
+                            <li>Safety gloves</li>
+                            <li>Safety glasses</li>
+                        </ul>
+                        <p style="margin-top:6px;">Inspect PPE before use and replace any damaged equipment. Do not enter a trash room without the required PPE.</p>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="serviceDate">Date:</label>
+                            <input type="date" id="serviceDate" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="technicianName">Technician:</label>
+                            <input type="text" id="technicianName" placeholder="Enter your name" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="roomLocation">Trash Room / Location:</label>
+                            <input type="text" id="roomLocation" placeholder="e.g. Building A - Level 2 Trash Room" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="signature">Signature:</label>
+                            <input type="text" id="signature" placeholder="Type full name to sign">
+                        </div>
+                    </div>
+                </div>
+
+                <div id="checklistSections"></div>
+
+                <div class="section">
+                    <div class="section-title">📝 Notes</div>
+                    <div class="form-group">
+                        <label for="notes">Additional observations:</label>
+                        <textarea id="notes" placeholder="Describe any issues, damage, or observations..."></textarea>
+                    </div>
+                </div>
+
+                <div class="button-bar">
+                    <button type="button" class="btn btn-primary" onclick="submitInspection()">📤 Submit & Send Report</button>
+                    <button type="button" class="btn btn-danger" onclick="resetForm()">🔄 Clear Form</button>
+                </div>
+
+                <div class="footer-warning">
+                    <b>IF THE WHEELS, CASTERS, OR BRAKES ARE DAMAGED, DO NOT USE THE DUMPSTER TUG/TRUCK</b>
+                    &nbsp;•&nbsp; <span>Report the damage immediately to your supervisor and use a pallet jack instead.</span>
+                </div>
+            </div>
+
+            <!-- History Tab -->
+            <div id="history" class="tab-content">
+                <div class="section">
+                    <div class="section-title">📋 Service History</div>
+                    <div id="historyList" style="max-height: 400px; overflow-y: auto;"></div>
+                </div>
+            </div>
+
+            <!-- SOP Guide / Instructions Tab -->
+            <div id="guide" class="tab-content">
+                <div class="purpose-box">
+                    <div class="accent"></div>
+                    <div class="text">
+                        <h3>PURPOSE OF THIS SOP</h3>
+                        <p>To establish a safe, consistent, and thorough process for removing, emptying, cleaning, and reconnecting trash room dumpsters to the compactor/ram. Every step must be completed in order, and no trash room is returned to normal operation until the final inspection confirms the dumpster is properly secured and the compactor is functioning correctly.</p>
+                    </div>
+                </div>
+
+                <div class="purpose-box">
+                    <div class="accent"></div>
+                    <div class="text">
+                        <h3>REQUIRED PPE</h3>
+                        <p>The following PPE must be worn whenever entering or working inside any trash room: safety gloves and safety glasses. Inspect PPE before use and replace any damaged equipment. Do not enter a trash room without the required PPE.</p>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">1  |  Preparation</div>
+                    <div class="guide-step">
+                        <p>Put on the required PPE before entering the trash room, and identify the trash or recycling dumpster that will be removed.</p>
+                        <p>Move the ram fully forward and stop it before disconnecting the dumpster. This keeps trash coming down the chute from spilling onto the floor while the dumpster is out for service.</p>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">2  |  Removing the Dumpster</div>
+                    <div class="guide-step">
+                        <p>Release the dumpster from the ram/compactor. Close the dumpster side door and secure it tightly using the chains on both sides — this keeps the door from opening and contains debris while the dumpster is in transit. Carefully remove the dumpster from the trash room.</p>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">3  |  Pre-Transport Safety Inspection</div>
+                    <div class="guide-step">
+                        <p>Before transporting the dumpster, verify the following:</p>
+                        <ul>
+                            <li>The side door is fully closed and securely latched.</li>
+                            <li>The caster brakes are engaged and functioning properly.</li>
+                            <li>The wheels and casters show no damage or excessive wear.</li>
+                            <li>The dumpster can be moved safely.</li>
+                        </ul>
+                        <div class="guide-note">⚠️ If the wheels, casters, or brakes are damaged, do <b>not</b> use the dumpster tug/truck. Report the damage immediately to your supervisor and use a pallet jack to move the dumpster to the main compactor instead.</div>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">4  |  Transport &amp; Disposal</div>
+                    <div class="guide-step">
+                        <p>Carefully transport the dumpster to the main waste disposal area and empty its contents into the main compactor, following standard facility procedures.</p>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">5  |  Cleaning &amp; Returning the Dumpster</div>
+                    <div class="guide-step">
+                        <p>Wash the dumpster as needed to remove any remaining debris or residue, then return the clean dumpster to the trash room.</p>
+                        <p>Before reconnecting the dumpster, clean any trash or debris from around the ram area and make sure the connection area is clear and safe.</p>
+                        <div class="guide-note">🔧 Sensor check: clean the compactor/ram sensor and remove all debris from the sensor area. A dirty or obstructed sensor can cause the compactor to time out, so this step should not be skipped.</div>
+                        <p>Reattach and securely connect the dumpster to the ram/compactor.</p>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">6  |  Restoring Normal Operation</div>
+                    <div class="guide-step">
+                        <p>Reset the compactor from the control panel located in the trash room and verify that the system is operating normally.</p>
+                        <p>Perform a final inspection to confirm:</p>
+                        <ul>
+                            <li>The dumpster is properly connected to the ram.</li>
+                            <li>The area around the ram is clean.</li>
+                            <li>The trash room is clean, organized, and ready for normal operation.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">⚠️ Safety Reminders</div>
+                    <div class="guide-step">
+                        <ul>
+                            <li>Always wear safety gloves and safety glasses while inside any trash room.</li>
+                            <li>Always move the ram fully forward before disconnecting the dumpster.</li>
+                            <li>Secure the dumpster side door before moving it out of the trash room.</li>
+                            <li>Inspect the dumpster, wheels, casters, and brakes before every transport.</li>
+                            <li>If there is any damage to the wheels, casters, or brakes, do not use the dumpster tug/truck — report it immediately and use a pallet jack if the dumpster needs to be moved.</li>
+                            <li>Keep the compactor sensor area clear of debris to prevent timeouts.</li>
+                            <li>Transport dumpsters carefully and stay aware of your surroundings to prevent injury or property damage.</li>
+                            <li>Report any damaged dumpsters, wheels, brakes, ram, or compactor components before continuing the operation.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- QR Code Tab -->
+            <div id="qr" class="tab-content">
+                <div class="qr-section">
+                    <h3>📱 Share This Checklist Link</h3>
+                    <p style="margin: 15px 0; color: #666;">Share this QR code with team members. They'll need the passcode to unlock it.</p>
+                    <div id="qrcode"></div>
+                    <div class="qr-link" id="shareLink"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // =====================================================================
+        // CONFIGURATION — update these three values before publishing to GitHub
+        // =====================================================================
+        const TARGET_EMAIL = 'mchristie@onni.com';                // where completed reports are sent
+        const CORRECT_PASSCODE = '1120';                          // 4-digit passcode to unlock the app
+        const PAGE_URL = 'https://YOUR-GITHUB-USERNAME.github.io/YOUR-REPO-NAME/'; // used for the QR code / share link
+        // =====================================================================
+
+        const SECTIONS = [
+            { title: '1  |  PREPARATION', items: [
+                'Required PPE worn (safety gloves, safety glasses)',
+                'Dumpster to be removed identified (trash or recycling)',
+                'Ram moved fully forward and stopped before disconnecting dumpster'
+            ]},
+            { title: '2  |  REMOVING THE DUMPSTER', items: [
+                'Dumpster released from the ram/compactor',
+                'Dumpster side door closed and secured with chains on both sides',
+                'Dumpster carefully removed from the trash room'
+            ]},
+            { title: '3  |  PRE-TRANSPORT SAFETY INSPECTION', items: [
+                'Dumpster side door fully closed and securely latched',
+                'Caster brakes engaged and functioning properly',
+                'Wheels and casters inspected for damage or excessive wear',
+                'Confirmed dumpster can be moved safely',
+                'If damaged: reported to supervisor and pallet jack used instead of tug/truck'
+            ]},
+            { title: '4  |  TRANSPORT & DISPOSAL', items: [
+                'Dumpster carefully transported to the main waste disposal area',
+                'Contents emptied into the main compactor following facility procedures'
+            ]},
+            { title: '5  |  CLEANING & RETURNING THE DUMPSTER', items: [
+                'Dumpster washed as needed',
+                'Clean dumpster returned to the trash room',
+                'Trash/debris cleaned from around the ram area before reconnecting',
+                'Compactor sensor cleaned and all debris removed from sensor area (prevents sensor timeout)',
+                'Connection area confirmed clear and safe',
+                'Dumpster reattached and secured to the ram/compactor'
+            ]},
+            { title: '6  |  RESTORING NORMAL OPERATION', items: [
+                'Compactor reset from the control panel in the trash room',
+                'Trash chute and compactor verified operating normally',
+                'Final check: dumpster properly connected to the ram',
+                'Final check: area around the ram is clean',
+                'Final check: trash room clean, organized, and ready for normal operation'
+            ]}
+        ];
+
+        // Flatten to a single ordered list of { id, label } for storage/reporting
+        const ITEMS = [];
+        SECTIONS.forEach((section, sIdx) => {
+            section.items.forEach((label, iIdx) => {
+                ITEMS.push({ id: `item_${sIdx}_${iIdx}`, label });
+            });
+        });
+
+        document.addEventListener('DOMContentLoaded', function () {
+            document.getElementById('passcodeInput').focus();
+            document.getElementById('passcodeInput').addEventListener('keypress', function (e) {
+                if (e.key === 'Enter') checkPasscode();
+            });
+
+            renderChecklist();
+            setTodayDate();
+            loadHistory();
+            generateQRCode();
+            checkPendingReports();
+            setupOnlineOfflineHandler();
+            loadFormFromLocalStorage();
+            setInterval(checkPendingReports, 5000);
+        });
+
+        // ---------- Passcode ----------
+        function checkPasscode() {
+            const input = document.getElementById('passcodeInput').value;
+            const errorMsg = document.getElementById('passcodeError');
+            if (input === CORRECT_PASSCODE) {
+                document.getElementById('passcodeOverlay').classList.add('hidden');
+                sessionStorage.setItem('unlocked', 'true');
+            } else {
+                errorMsg.classList.add('show');
+                document.getElementById('passcodeInput').value = '';
+                document.getElementById('passcodeInput').focus();
+                setTimeout(() => errorMsg.classList.remove('show'), 2000);
+            }
+        }
+        window.addEventListener('load', function () {
+            if (sessionStorage.getItem('unlocked') === 'true') {
+                document.getElementById('passcodeOverlay').classList.add('hidden');
+            }
+        });
+
+        function setTodayDate() {
+            document.getElementById('serviceDate').value = new Date().toISOString().split('T')[0];
+        }
+
+        // ---------- Online/Offline ----------
+        function setupOnlineOfflineHandler() {
+            window.addEventListener('online', () => updateOnlineStatus(true));
+            window.addEventListener('offline', () => updateOnlineStatus(false));
+            updateOnlineStatus(navigator.onLine);
+        }
+        function updateOnlineStatus(isOnline) {
+            const indicator = document.getElementById('offlineIndicator');
+            if (isOnline) {
+                indicator.textContent = '🟢 Online';
+                indicator.classList.remove('offline'); indicator.classList.add('online');
+            } else {
+                indicator.textContent = '🔴 Offline';
+                indicator.classList.remove('online'); indicator.classList.add('offline');
+            }
+        }
+
+        // ---------- Render checklist ----------
+        function renderChecklist() {
+            const container = document.getElementById('checklistSections');
+            container.innerHTML = SECTIONS.map((section, sIdx) => `
+                <div class="section">
+                    <div class="section-title">${section.title}</div>
+                    ${section.items.map((label, iIdx) => `
+                        <div class="checklist-item" id="row_item_${sIdx}_${iIdx}" onclick="toggleCheck('item_${sIdx}_${iIdx}')">
+                            <div class="box" id="box_item_${sIdx}_${iIdx}"></div>
+                            <div class="label">${label}</div>
+                        </div>
+                    `).join('')}
+                </div>
+            `).join('');
+        }
+
+        function toggleCheck(itemId) {
+            const row = document.getElementById('row_' + itemId);
+            const box = document.getElementById('box_' + itemId);
+            const isChecked = row.classList.toggle('checked');
+            box.textContent = isChecked ? '✓' : '';
+            row.dataset.value = isChecked ? 'done' : '';
+            saveFormToLocalStorage();
+        }
+
+        // ---------- Local storage (draft) ----------
+        function saveFormToLocalStorage() {
+            const formData = {
+                date: document.getElementById('serviceDate').value,
+                technician: document.getElementById('technicianName').value,
+                location: document.getElementById('roomLocation').value,
+                signature: document.getElementById('signature').value,
+                notes: document.getElementById('notes').value,
+                items: {}
+            };
+            ITEMS.forEach(item => {
+                const row = document.getElementById('row_' + item.id);
+                if (row && row.dataset.value) formData.items[item.id] = row.dataset.value;
+            });
+            localStorage.setItem('compactorCurrentForm', JSON.stringify(formData));
+        }
+
+        function loadFormFromLocalStorage() {
+            const saved = localStorage.getItem('compactorCurrentForm');
+            if (!saved) return;
+            const data = JSON.parse(saved);
+            document.getElementById('serviceDate').value = data.date || '';
+            document.getElementById('technicianName').value = data.technician || '';
+            document.getElementById('roomLocation').value = data.location || '';
+            document.getElementById('signature').value = data.signature || '';
+            document.getElementById('notes').value = data.notes || '';
+            Object.keys(data.items || {}).forEach(itemId => {
+                const row = document.getElementById('row_' + itemId);
+                const box = document.getElementById('box_' + itemId);
+                if (row && data.items[itemId] === 'done') {
+                    row.classList.add('checked');
+                    row.dataset.value = 'done';
+                    box.textContent = '✓';
+                }
+            });
+        }
+
+        // ---------- History ----------
+        function loadHistory() {
+            const history = JSON.parse(localStorage.getItem('compactorHistory')) || [];
+            const historyList = document.getElementById('historyList');
+            if (history.length === 0) {
+                historyList.innerHTML = '<p style="color:#999;text-align:center;padding:20px;">No services logged yet.</p>';
+                return;
+            }
+            historyList.innerHTML = history.map((entry, index) => `
+                <div style="background:#f9f9f9;padding:12px;margin-bottom:10px;border-radius:5px;border-left:4px solid ${entry.status === 'sent' ? '#27ae60' : '#e74c3c'};">
+                    <strong>${entry.date} — ${entry.location}</strong><br>
+                    Technician: ${entry.technician}<br>
+                    Status: <span style="color:${entry.status === 'sent' ? '#27ae60' : '#e74c3c'};font-weight:bold;">${entry.status === 'sent' ? '✅ Sent' : '⏳ Pending Send'}</span><br>
+                    <button type="button" class="btn btn-secondary" onclick="viewReport(${index})">View Report</button>
+                </div>
+            `).join('');
+        }
+
+        // ---------- Submit ----------
+        function submitInspection() {
+            if (!document.getElementById('serviceDate').value) { alert('Please select a date'); return; }
+            if (!document.getElementById('technicianName').value) { alert('Please enter technician name'); return; }
+            if (!document.getElementById('roomLocation').value) { alert('Please enter the trash room / location'); return; }
+
+            const report = {
+                id: Date.now(),
+                date: document.getElementById('serviceDate').value,
+                technician: document.getElementById('technicianName').value,
+                location: document.getElementById('roomLocation').value,
+                signature: document.getElementById('signature').value,
+                timestamp: new Date().toISOString(),
+                items: {},
+                notes: document.getElementById('notes').value,
+                status: 'pending'
+            };
+            ITEMS.forEach(item => {
+                const row = document.getElementById('row_' + item.id);
+                if (row && row.dataset.value) report.items[item.id] = row.dataset.value;
+            });
+
+            let history = JSON.parse(localStorage.getItem('compactorHistory')) || [];
+            history.unshift(report);
+            localStorage.setItem('compactorHistory', JSON.stringify(history));
+
+            generateAndSendReport(report, history);
+            showSuccessMessage();
+            setTimeout(() => { resetForm(); loadHistory(); checkPendingReports(); }, 1500);
+        }
+
+        function generateAndSendReport(report, history) {
+            const element = document.createElement('div');
+            element.innerHTML = generatePDFHTML(report);
+            element.style.position = 'fixed';
+            element.style.top = '0';
+            element.style.left = '-9999px';
+            element.style.width = '800px';
+            element.style.background = '#ffffff';
+            document.body.appendChild(element);
+
+            const filename = `Compactor_Usage_${report.date}_${report.location.replace(/\s+/g, '_')}.pdf`;
+            const opt = {
+                margin: 10, filename: filename,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2, backgroundColor: '#ffffff' },
+                jsPDF: { orientation: 'portrait', unit: 'mm', format: 'a4' }
+            };
+
+            html2pdf().set(opt).from(element).toPdf().output('blob').then(pdfBlob => {
+                document.body.removeChild(element);
+                const downloadUrl = URL.createObjectURL(pdfBlob);
+                const a = document.createElement('a');
+                a.href = downloadUrl; a.download = filename;
+                document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                URL.revokeObjectURL(downloadUrl);
+                sendEmailWithAttachment(report, pdfBlob, filename, history);
+            }).catch(err => {
+                console.error('PDF generation error:', err);
+                if (element.parentNode) document.body.removeChild(element);
+            });
+        }
+
+        function sendEmailWithAttachment(report, pdfBlob, filename, history) {
+            const emailBody = buildEmailBody(report);
+            const formData = new FormData();
+            formData.append('email', TARGET_EMAIL);
+            formData.append('subject', `Compactor Usage Report - ${report.date} - ${report.location}`);
+            formData.append('message', emailBody);
+            formData.append('attachment', pdfBlob, filename);
+
+            fetch(`https://formsubmit.co/ajax/${TARGET_EMAIL}`, {
+                method: 'POST', body: formData, headers: { 'Accept': 'application/json' }
+            })
+            .then(() => markSent(report, history))
+            .catch(() => markSent(report, history));
+        }
+
+        function markSent(report, history) {
+            report.status = 'sent';
+            if (history && history[0]) history[0].status = 'sent';
+            localStorage.setItem('compactorHistory', JSON.stringify(history));
+            loadHistory();
+        }
+
+        function showSuccessMessage() {
+            const msg = document.getElementById('successMessage');
+            msg.classList.add('show');
+            setTimeout(() => msg.classList.remove('show'), 4000);
+        }
+
+        function resetForm() {
+            document.getElementById('serviceDate').value = new Date().toISOString().split('T')[0];
+            document.getElementById('technicianName').value = '';
+            document.getElementById('roomLocation').value = '';
+            document.getElementById('signature').value = '';
+            document.getElementById('notes').value = '';
+            ITEMS.forEach(item => {
+                const row = document.getElementById('row_' + item.id);
+                const box = document.getElementById('box_' + item.id);
+                if (row) { row.classList.remove('checked'); row.dataset.value = ''; }
+                if (box) box.textContent = '';
+            });
+            localStorage.removeItem('compactorCurrentForm');
+        }
+
+        function checkPendingReports() {
+            const pending = JSON.parse(localStorage.getItem('compactorPendingEmails')) || [];
+            document.getElementById('pendingCount').textContent = pending.length;
+            document.getElementById('pendingReports').classList.toggle('show', pending.length > 0);
+        }
+
+        function buildEmailBody(report) {
+            let body = `TRASH ROOM COMPACTOR USAGE REPORT\n`;
+            body += `========================================\n\n`;
+            body += `Date: ${report.date}\n`;
+            body += `Trash Room / Location: ${report.location}\n`;
+            body += `Technician: ${report.technician}\n`;
+            body += `Signature: ${report.signature || '(not signed)'}\n`;
+            body += `Submitted: ${new Date(report.timestamp).toLocaleString()}\n\n`;
+            body += `CHECKLIST RESULTS:\n----------------------------------------\n`;
+            ITEMS.forEach(item => {
+                const status = report.items[item.id] === 'done' ? 'COMPLETE' : 'NOT COMPLETED';
+                body += `${item.label}: ${status}\n`;
+            });
+            if (report.notes) {
+                body += `\nADDITIONAL NOTES:\n----------------------------------------\n${report.notes}\n`;
+            }
+            body += `\n========================================\nGenerated by the Compactor Usage Checklist App\n`;
+            return body;
+        }
+
+        function downloadReportPDF(report) {
+            const element = document.createElement('div');
+            element.innerHTML = generatePDFHTML(report);
+            element.style.position = 'fixed';
+            element.style.top = '0';
+            element.style.left = '-9999px';
+            element.style.width = '800px';
+            element.style.background = '#ffffff';
+            document.body.appendChild(element);
+
+            const opt = {
+                margin: 10,
+                filename: `Compactor_Usage_${report.date}_${report.location.replace(/\s+/g, '_')}.pdf`,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2, backgroundColor: '#ffffff' },
+                jsPDF: { orientation: 'portrait', unit: 'mm', format: 'a4' }
+            };
+            html2pdf().set(opt).from(element).save().then(() => {
+                document.body.removeChild(element);
+            }).catch(err => {
+                console.error('PDF generation error:', err);
+                document.body.removeChild(element);
+            });
+        }
+
+        function generatePDFHTML(report) {
+            let html = `
+                <div style="font-family: Arial, sans-serif; padding: 20px; max-width: 800px;">
+                    <h1 style="text-align:center;color:#1A1A2E;">Trash Room Compactor Usage Report</h1>
+                    <div style="background:#F5EFE6;border-left:4px solid #C8A96E;padding:15px;margin:20px 0;border-radius:5px;">
+                        <p><strong>Date:</strong> ${report.date}</p>
+                        <p><strong>Trash Room / Location:</strong> ${report.location}</p>
+                        <p><strong>Technician:</strong> ${report.technician}</p>
+                        <p><strong>Signature:</strong> ${report.signature || '(not signed)'}</p>
+                        <p><strong>Submitted:</strong> ${new Date(report.timestamp).toLocaleString()}</p>
+                    </div>
+                    <h2 style="color:#1A1A2E;margin-top:30px;">Checklist Results</h2>
+                    <table style="width:100%;border-collapse:collapse;">
+                        <tr style="background:#1A1A2E;">
+                            <th style="text-align:left;padding:10px;border:1px solid #ddd;color:#fff;">Item</th>
+                            <th style="text-align:right;padding:10px;border:1px solid #ddd;color:#fff;">Status</th>
+                        </tr>
+            `;
+            ITEMS.forEach(item => {
+                const done = report.items[item.id] === 'done';
+                const color = done ? '#27ae60' : '#e74c3c';
+                const text = done ? '✅ COMPLETE' : '❌ NOT COMPLETED';
+                html += `
+                    <tr>
+                        <td style="padding:10px;border:1px solid #ddd;">${item.label}</td>
+                        <td style="padding:10px;border:1px solid #ddd;text-align:right;color:${color};font-weight:bold;">${text}</td>
+                    </tr>`;
+            });
+            html += `</table>`;
+            if (report.notes) {
+                html += `<h2 style="color:#1A1A2E;margin-top:30px;">Additional Notes</h2><p>${report.notes}</p>`;
+            }
+            html += `
+                    <div style="margin-top:40px;padding-top:20px;border-top:2px solid #C8A96E;text-align:center;color:#999;font-size:12px;">
+                        <p>Generated by the Compactor Usage Checklist App — Onni Group</p>
+                    </div>
+                </div>`;
+            return html;
+        }
+
+        function viewReport(index) {
+            const history = JSON.parse(localStorage.getItem('compactorHistory')) || [];
+            if (history[index]) downloadReportPDF(history[index]);
+        }
+
+        function switchTab(e, tabName) {
+            e.preventDefault();
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(tabName).classList.add('active');
+            e.target.classList.add('active');
+        }
+
+        function generateQRCode() {
+            document.getElementById('qrcode').innerHTML = '';
+            new QRCode(document.getElementById('qrcode'), {
+                text: PAGE_URL, width: 220, height: 220, colorDark: '#1A1A2E', colorLight: '#ffffff'
+            });
+            document.getElementById('shareLink').textContent = PAGE_URL;
+        }
+    </script>
+</body>
+</html>
